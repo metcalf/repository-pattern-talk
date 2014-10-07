@@ -17,7 +17,6 @@ ORMExample::VerificationCode.find_by_id(vc.id)
 vc.verify('123456')
 ORMExample::VerificationCode.find_by_id(vc.id)
 
-ls ORMExample::VerificationCode
 ls vc
 ```
 

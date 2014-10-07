@@ -1,11 +1,13 @@
 require 'active_record'
 
 module ORMExample
-  # Ignore me being lurky
-  ActiveRecord::Base.establish_connection(
-    :adapter => 'sqlite3',
-    :database => 'orm_example.db',
-    )
+  def self.init(db_path)
+    # Ignore me being lurky
+    ActiveRecord::Base.establish_connection(
+      :adapter => 'sqlite3',
+      :database => db_path,
+      )
+  end
 end
 
 require_relative 'migration.rb'

@@ -35,20 +35,12 @@ module ORMExample
     end
 
     def verify(attempted_code)
-      valid = attempts < MAX_ATTEMPTS && code == attempted_code
+      VerificationCode.increment_counter(:attempts, id)
+      reload
+
+      valid = attempts <= MAX_ATTEMPTS && code == attempted_code
 
       return false if expires_at < Time.now
-
-      # Compare and swap attempts counter
-      while true
-        cnt = VerificationCode.where(:id => id)
-          .where(:attempts => attempts)
-          .update_all(attempts: attempts + 1)
-
-        break if cnt > 0
-
-        reload
-      end
 
       update(:used_at => Time.new) if valid
 

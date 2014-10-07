@@ -5,10 +5,8 @@ module RepoExample
     MAX_ATTEMPTS = 5
 
     FIND_VERIFICATION = <<-SQL
-SELECT verification_codes.rowid
-  phone, sender_type, status, body, attempts, code,
-  expires_at < datetime("now") as expired,
-  used_at IS NOT NULL as used
+SELECT phone, sender_type, status, body, attempts, code,
+  expires_at, used_at
 FROM verification_codes
 LEFT JOIN messages ON messages.verification_code_id = verification_codes.rowid
 WHERE verification_codes.rowid = :id
@@ -28,17 +26,18 @@ SQL
     UPDATE_CODE_ATTEMPTS = <<-SQL
 UPDATE verification_codes
 SET attempts=attempts+1
-WHERE rowid = :id AND attempts = :attempts
+WHERE rowid = :id
 SQL
 
     UPDATE_USED_AT = <<-SQL
 UPDATE verification_codes
-SET used_at = 'now'
+SET used_at = :used_at
 WHERE rowid = :id AND used_at IS NULL
 SQL
 
-    def initialize(db)
-      @db = db
+    def initialize(db_file)
+      @db = SQLite3::Database.new(db_file)
+      @db.results_as_hash = true
     end
 
     def create_verification_message(sender_type, phone, body, code)
@@ -64,30 +63,38 @@ SQL
     end
 
     def get_verification(id)
-      row = @db.get_first_row(FIND_VERIFICATION, "id" => id)
+      row = @db.get_first_row(FIND_VERIFICATION, 'id' => id)
 
-      row["expired"] = row["expired"] == 0
-      row["used"] = row["expired"] == 0
+      verification = Verification.new
+      %w{phone sender_type body attempts code}.each do |key|
+        verification.send("#{key}=", row[key])
+      end
+      verification.id = id
 
-      row
+      %w{expires_at used_at}.each do |key|
+        val = row[key] ? Time.at(row[key]) : nil
+        verification.send("#{key}=", val)
+      end
+
+      verification
     end
 
     def verify_code(id, code)
-      vc = nil
+      @db.execute(UPDATE_CODE_ATTEMPTS, 'id' => id)
+      return nil if @db.changes == 0 # Does not exist
 
-      while true
-        vc = get_verification(id)
-        return false if vc.nil? or vc["expired"] or vc["attempts"] > MAX_ATTEMPTS
+      vc = get_verification(id)
+      return false if vc.nil? || vc.expires_at < Time.now || vc.attempts > MAX_ATTEMPTS
 
-        @db.execute(UPDATE_CODE_ATTEMPTS, "id" => id, "attempts" => vc["attempts"])
-        break if @db.changes > 0
-      end
+      valid = vc.code == code
 
-      valid = vc["code"] == code
-
-      @db.execute(UPDATE_USED_AT, "id" => id) if valid
+      @db.execute(UPDATE_USED_AT, 'id' => id, 'used_at' => Time.now.to_i) if valid
 
       valid
     end
+  end
+
+  class Verification
+    attr_accessor :id, :phone, :sender_type, :status, :body, :attempts, :code, :expires_at, :used_at
   end
 end
